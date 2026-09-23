@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Camera body / Clapperboard -->
+    <path
+        android:fillColor="#FF3D00"
+        android:pathData="M28,34 h52 c3.3,0 6,2.7 6,6 v34 c0,3.3 -2.7,6 -6,6 H28 c-3.3,0 -6,-2.7 -6,-6 V40 c0,-3.3 2.7,-6 6,-6 z" />
+    <!-- Clapper top stripes -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,38 l6,0 l-5,10 l-6,0 z M46,38 l6,0 l-5,10 l-6,0 z M60,38 l6,0 l-5,10 l-6,0 z M74,38 l6,0 l-5,10 l-6,0 z" />
+    <!-- Play Triangle in Center -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,53 L64,62 L48,71 Z" />
+    <!-- AI Star badge -->
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M78,30 L80,36 L86,38 L80,40 L78,46 L76,40 L70,38 L76,36 Z" />
+</vector>

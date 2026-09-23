@@ -1,0 +1,6 @@
+{
+  "name": "QISMAT AI",
+  "description": "Socho Nahi, Apni Qismat Dekho - 1 Photo Se Poori Film. Pakistan's first Qismat AI app with Time Machine age progression, Karachi locations, and Dua-to-Film story engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
