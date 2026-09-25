@@ -15,11 +15,10 @@ import org.json.JSONObject
 import java.io.IOException
 
 /**
- * Small REST client for Magic Hour's official API.
+ * Magic Hour image-to-video client.
  *
- * The mobile client should ideally call a backend proxy so the bearer token is
- * never shipped in an APK. This class is useful for development builds where
- * MAGIC_HOUR_API_KEY is supplied through the Secrets Gradle Plugin.
+ * For production, move this call behind a server proxy so the API token is not
+ * embedded in the APK. It is intentionally kept here for development/testing.
  */
 class MagicHourVideoClient(
   private val context: Context,
@@ -27,10 +26,24 @@ class MagicHourVideoClient(
 ) {
   companion object {
     private const val BASE_URL = "https://api.magichour.ai"
+    private const val PLACEHOLDER_KEY = "YOUR_MAGIC_HOUR_API_KEY"
   }
 
   private val token: String
     get() = BuildConfig.MAGIC_HOUR_API_KEY.trim()
+
+  fun isConfigured(): Boolean = token.isNotBlank() && token != PLACEHOLDER_KEY
+
+  suspend fun createAndWait(
+    imageUri: Uri,
+    prompt: String,
+    name: String,
+    durationSeconds: Int = 5,
+    resolution: String = "480p"
+  ): String {
+    val projectId = createVideo(imageUri, prompt, name, durationSeconds, resolution)
+    return waitForVideo(projectId)
+  }
 
   suspend fun createVideo(
     imageUri: Uri,
@@ -39,36 +52,41 @@ class MagicHourVideoClient(
     durationSeconds: Int = 5,
     resolution: String = "480p"
   ): String = withContext(Dispatchers.IO) {
-    require(token.isNotBlank() && token != "YOUR_MAGIC_HOUR_API_KEY") {
+    require(isConfigured()) {
       "Magic Hour API key is missing. Add MAGIC_HOUR_API_KEY to the local .env file."
+    }
+    require(imageUri.scheme == "content" || imageUri.scheme == "file") {
+      "Please select a photo from the phone gallery or camera. Demo web images cannot be uploaded."
     }
 
     val imagePath = uploadImage(imageUri)
     val body = JSONObject().apply {
       put("name", name)
-      put("end_seconds", durationSeconds)
+      put("end_seconds", durationSeconds.coerceIn(2, 10))
       put("model", "default")
       put("resolution", resolution)
       put("audio", false)
       put("assets", JSONObject().put("image_file_path", imagePath))
-      put("style", JSONObject().put("prompt", prompt))
+      put("style", JSONObject().put("prompt", prompt.take(4000)))
     }
 
-    request("POST", "/v1/image-to-video", body.toString())
-      .getString("id")
+    request("POST", "/v1/image-to-video", body.toString()).getString("id")
   }
 
   suspend fun waitForVideo(projectId: String, maxPolls: Int = 60): String = withContext(Dispatchers.IO) {
+    require(isConfigured()) { "Magic Hour API key is missing." }
     repeat(maxPolls) {
       val result = request("GET", "/v1/video-projects/$projectId")
-      when (result.optString("status")) {
-        "complete" -> {
+      when (result.optString("status").lowercase()) {
+        "complete", "completed", "succeeded" -> {
           val downloads = result.optJSONArray("downloads") ?: JSONArray()
           if (downloads.length() == 0) error("Magic Hour completed without a download URL")
-          return@withContext downloads.getJSONObject(0).optString("url")
-            .ifBlank { downloads.getJSONObject(0).optString("download_url") }
+          val item = downloads.getJSONObject(0)
+          return@withContext item.optString("url").ifBlank { item.optString("download_url") }
         }
-        "error", "canceled" -> error(result.optJSONObject("error")?.optString("message") ?: "Magic Hour job failed")
+        "error", "failed", "canceled", "cancelled" -> {
+          error(result.optJSONObject("error")?.optString("message") ?: "Magic Hour job failed")
+        }
       }
       delay(3000)
     }
@@ -79,7 +97,14 @@ class MagicHourVideoClient(
     val resolver = context.contentResolver
     val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
       ?: throw IOException("Could not read selected image")
-    val extension = resolver.getType(uri)?.substringAfterLast('/', "jpg") ?: "jpg"
+    require(bytes.isNotEmpty()) { "Selected image is empty" }
+
+    val mime = resolver.getType(uri).orEmpty().lowercase()
+    val extension = when (mime) {
+      "image/png" -> "png"
+      "image/webp" -> "webp"
+      else -> "jpg"
+    }
     val requestBody = JSONObject()
       .put("items", JSONArray().put(JSONObject().put("type", "image").put("extension", extension)))
       .toString()
@@ -96,11 +121,15 @@ class MagicHourVideoClient(
   }
 
   private fun request(method: String, path: String, json: String? = null): JSONObject {
-    val builder = Request.Builder().url(BASE_URL + path)
+    val body = json?.toRequestBody("application/json".toMediaType())
+    val request = Request.Builder()
+      .url(BASE_URL + path)
       .addHeader("Accept", "application/json")
       .addHeader("Authorization", "Bearer $token")
-    if (json != null) builder.post(json.toRequestBody("application/json".toMediaType()))
-    http.newCall(builder.method(method, if (method == "GET") null else json?.toRequestBody("application/json".toMediaType())).build()).execute().use { response ->
+      .method(method, if (method == "GET") null else body)
+      .build()
+
+    http.newCall(request).execute().use { response ->
       val text = response.body?.string().orEmpty()
       if (!response.isSuccessful) throw IOException("Magic Hour HTTP ${response.code}: $text")
       return JSONObject(text)
