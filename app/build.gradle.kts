@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -21,6 +22,30 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    val envFile = rootProject.file(".env")
+    val defaultEnvFile = rootProject.file(".env.example")
+    val envProperties = Properties().apply {
+      if (envFile.exists()) {
+        envFile.inputStream().use { load(it) }
+      } else if (defaultEnvFile.exists()) {
+        defaultEnvFile.inputStream().use { load(it) }
+      }
+    }
+
+    val magicHourApiKey = envProperties.getProperty("MAGIC_HOUR_API_KEY", "YOUR_MAGIC_HOUR_API_KEY")
+    val geminiApiKey = envProperties.getProperty("GEMINI_API_KEY", "")
+
+    buildConfigField(
+      "String",
+      "MAGIC_HOUR_API_KEY",
+      "\"${magicHourApiKey.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+    )
+    buildConfigField(
+      "String",
+      "GEMINI_API_KEY",
+      "\"${geminiApiKey.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+    )
   }
 
   signingConfigs {
