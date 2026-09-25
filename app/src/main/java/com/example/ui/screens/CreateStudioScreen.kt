@@ -88,16 +88,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import coil.compose.AsyncImage
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.data.CityLocation
 import com.example.data.PakistanCitiesData
 import com.example.data.StylePresets
 import com.example.model.FilmScene
 import com.example.model.StudioMode
+import com.example.model.VideoGenerationMode
 import com.example.ui.components.BigRedButton
 import com.example.ui.components.BismillahHeader
 import com.example.ui.components.CameraXCaptureDialog
@@ -154,11 +155,12 @@ fun CreateStudioScreen(
   val generatedScenes by viewModel.generatedScenes.collectAsState()
   val isProUser by viewModel.isProUser.collectAsState()
   val showPaywallDialog by viewModel.showPaywallDialog.collectAsState()
+  val selectedGenerationMode by viewModel.selectedGenerationMode.collectAsState()
+  val availableGenerationModes = viewModel.videoGenerationModes()
 
   val context = LocalContext.current
   val pendingHeroImageUri by viewModel.pendingHeroImageUri.collectAsState()
 
-  // Gallery Picker
   val photoPickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickVisualMedia()
   ) { uri: Uri? ->
@@ -167,14 +169,10 @@ fun CreateStudioScreen(
     }
   }
 
-  // In-App CameraX Fullscreen Capture
   var showCameraXDialog by remember { mutableStateOf(false) }
-
-  // Room Local Story Drafts Dialog
   var showDraftsDialog by remember { mutableStateOf(false) }
   val allDrafts by viewModel.allDrafts.collectAsState()
 
-  // Fallback Camera Picker (TakePicturePreview captures Bitmap)
   val cameraLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.TakePicturePreview()
   ) { bitmap: Bitmap? ->
@@ -183,7 +181,6 @@ fun CreateStudioScreen(
     }
   }
 
-  // Camera Permission Launcher
   val cameraPermissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission()
   ) { isGranted: Boolean ->
@@ -206,7 +203,6 @@ fun CreateStudioScreen(
     }
   }
 
-  // Voice Dictation for Dua & Story
   var voiceTargetMode by remember { mutableStateOf<StudioMode?>(null) }
   val speechRecognizerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.StartActivityForResult()
@@ -234,20 +230,18 @@ fun CreateStudioScreen(
     }
     try {
       speechRecognizerLauncher.launch(intent)
-    } catch (e: Exception) {
-      // Fallback with default locale
+    } catch (_: Exception) {
       val fallbackIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
       }
       try {
         speechRecognizerLauncher.launch(fallbackIntent)
-      } catch (err: Exception) {
+      } catch (_: Exception) {
         Toast.makeText(context, "Voice input is device par dastiyab nahi hai", Toast.LENGTH_SHORT).show()
       }
     }
   }
 
-  // Scene dialogue editing dialog state
   var sceneBeingEdited by remember { mutableStateOf<FilmScene?>(null) }
   var editedDialogueText by remember { mutableStateOf("") }
   var editedSceneDesc by remember { mutableStateOf("") }
@@ -261,7 +255,6 @@ fun CreateStudioScreen(
       .testTag("create_studio_screen"),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
-    // Mode Switcher Bar (Time Machine vs Dua Se Film vs Story)
     item {
       Spacer(modifier = Modifier.height(4.dp))
       Card(
@@ -309,7 +302,60 @@ fun CreateStudioScreen(
       }
     }
 
-    // Step Header
+    item {
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = CinematicSurfaceElevated),
+        shape = RoundedCornerShape(16.dp)
+      ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+          Text(
+            text = "Render Mode",
+            color = QismatGold,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black
+          )
+          Spacer(modifier = Modifier.height(8.dp))
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            val generationOptions = availableGenerationModes
+            generationOptions.forEach { mode ->
+              val isSelected = selectedGenerationMode == mode
+              val label = when (mode) {
+                VideoGenerationMode.OFFLINE_CINEMATIC -> "Offline MP4"
+                VideoGenerationMode.CLOUD_AI -> "Cloud AI"
+              }
+              Box(
+                modifier = Modifier
+                  .weight(1f)
+                  .clip(RoundedCornerShape(12.dp))
+                  .background(if (isSelected) QismatGold.copy(alpha = 0.18f) else CinematicSurface)
+                  .border(1.dp, if (isSelected) QismatGold else CinematicBorder, RoundedCornerShape(12.dp))
+                  .clickable { viewModel.setGenerationMode(mode) }
+                  .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+              ) {
+                Text(
+                  text = label,
+                  color = if (isSelected) QismatGold else CinematicWhite,
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 11.sp
+                )
+              }
+            }
+          }
+          Spacer(modifier = Modifier.height(6.dp))
+          Text(
+            text = if (selectedGenerationMode == VideoGenerationMode.OFFLINE_CINEMATIC) "No API key required — saves real MP4 to Movies/Qismat AI." else "Cloud AI mode is optional and needs a valid Magic Hour API key.",
+            color = CinematicTextMuted,
+            fontSize = 10.sp
+          )
+        }
+      }
+    }
+
     item {
       StudioStepperHeader(
         activeStep = currentStep,
@@ -317,7 +363,6 @@ fun CreateStudioScreen(
       )
     }
 
-    // STEP 1: HERO FACE LOCK
     item {
       StepperSection(
         stepNumber = 1,
@@ -328,7 +373,6 @@ fun CreateStudioScreen(
         onHeaderClick = { viewModel.setStep(1) }
       ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-          // If user just picked a pending photo from camera or gallery, show Confirmation & Face Center Crop preview
           if (pendingHeroImageUri != null) {
             Card(
               modifier = Modifier
@@ -429,7 +473,6 @@ fun CreateStudioScreen(
               }
             }
           } else {
-            // Standard Dashed Box or Active Selected Hero Box
             DashedUploadBox(
               imageUri = heroImageUri,
               isFaceLocked = isFaceLocked,
@@ -442,7 +485,6 @@ fun CreateStudioScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Action Buttons: Camera vs Gallery
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -501,7 +543,6 @@ fun CreateStudioScreen(
 
           Spacer(modifier = Modifier.height(10.dp))
 
-          // Demo Avatars
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -524,7 +565,6 @@ fun CreateStudioScreen(
 
           Spacer(modifier = Modifier.height(12.dp))
 
-          // Face Lock Toggle Card
           Card(
             modifier = Modifier
               .fillMaxWidth()
@@ -596,7 +636,6 @@ fun CreateStudioScreen(
       }
     }
 
-    // STEP 2: MODE-SPECIFIC PROMPT & STYLE
     item {
       StepperSection(
         stepNumber = 2,
@@ -611,7 +650,6 @@ fun CreateStudioScreen(
         onHeaderClick = { viewModel.setStep(2) }
       ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-          // Room Persistence Draft Bar
           Row(
             modifier = Modifier
               .fillMaxWidth()
@@ -619,7 +657,6 @@ fun CreateStudioScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            // Save Draft button
             Box(
               modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
@@ -646,7 +683,6 @@ fun CreateStudioScreen(
               }
             }
 
-            // View Drafts button
             Box(
               modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
@@ -674,10 +710,8 @@ fun CreateStudioScreen(
             }
           }
 
-          // A: MODE SPECIFIC INPUTS
           when (selectedMode) {
             StudioMode.TIME_MACHINE -> {
-              // 5-Stage Life Progression Explanation Card
               Card(
                 modifier = Modifier
                   .fillMaxWidth()
@@ -722,7 +756,6 @@ fun CreateStudioScreen(
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp
                 )
-                // Voice Dictation Mic Button
                 Box(
                   modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
@@ -778,7 +811,6 @@ fun CreateStudioScreen(
 
               Spacer(modifier = Modifier.height(8.dp))
 
-              // Dua Starter Chips
               LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
                   StoryStarterChip("🤲 Walidain Ka Sar Fakhar Se Buland") {
@@ -812,7 +844,6 @@ fun CreateStudioScreen(
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp
                 )
-                // Voice Dictation Mic Button
                 Box(
                   modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
@@ -890,7 +921,6 @@ fun CreateStudioScreen(
             }
           }
 
-          // B: FULL PAKISTAN CITIES & INTERNATIONAL DREAMS SELECTOR
           Card(
             modifier = Modifier
               .fillMaxWidth()
@@ -900,7 +930,6 @@ fun CreateStudioScreen(
             colors = CardDefaults.cardColors(containerColor = CinematicSurfaceElevated)
           ) {
             Column(modifier = Modifier.padding(14.dp)) {
-              // Top Bar with Title & Auto-Detect Button
               Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -922,7 +951,6 @@ fun CreateStudioScreen(
                   )
                 }
 
-                // Auto-Detect My City Button
                 Box(
                   modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
@@ -950,7 +978,6 @@ fun CreateStudioScreen(
                 }
               }
 
-              // Feedback if auto-detected
               if (detectedCityMessage != null) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
@@ -963,7 +990,6 @@ fun CreateStudioScreen(
 
               Spacer(modifier = Modifier.height(10.dp))
 
-              // Current Selected City Display Card (Tappable to expand/collapse)
               Box(
                 modifier = Modifier
                   .fillMaxWidth()
@@ -1000,680 +1026,147 @@ fun CreateStudioScreen(
                           .padding(horizontal = 6.dp, vertical = 2.dp)
                       ) {
                         Text(
-                          text = selectedCityLocation.group,
-                          color = QismatGold,
-                          fontSize = 9.sp,
-                          fontWeight = FontWeight.Bold
+                          text = selectedCityLocation.category,
+                          color = Color.Black,
+                          fontWeight = FontWeight.Bold,
+                          fontSize = 8.sp
                         )
                       }
                     }
-
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                      text = "Places: ${selectedCityLocation.fullPlacesList}",
-                      color = CinematicTextDim,
-                      fontSize = 11.sp,
-                      maxLines = 1
-                    )
                   }
-
                   Icon(
                     imageVector = if (isLocationDropdownOpen) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                    contentDescription = "Toggle Cities",
+                    contentDescription = "Toggle location list",
                     tint = QismatGold,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(18.dp)
                   )
                 }
               }
 
-              // Respectful Mode Notice for Makkah / Madinah
-              if (selectedCityLocation.isRespectfulNoMusic) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(QismatEmerald.copy(alpha = 0.15f))
-                    .border(1.dp, QismatEmerald.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🕋", fontSize = 12.sp)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                      text = "Respectful Spiritual Mode: Acapella/Nasheed ambience only, no instrumental music.",
-                      color = QismatEmerald,
-                      fontSize = 11.sp,
-                      fontWeight = FontWeight.SemiBold
-                    )
-                  }
-                }
-              }
-
-              // Searchable Expanded Dropdown Panel
               AnimatedVisibility(
                 visible = isLocationDropdownOpen,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
               ) {
-                Column(modifier = Modifier.padding(top = 12.dp)) {
-                  // Search Input
-                  OutlinedTextField(
-                    value = citySearchQuery,
-                    onValueChange = { citySearchQuery = it },
-                    modifier = Modifier
-                      .fillMaxWidth()
-                      .testTag("city_search_input"),
-                    placeholder = {
+                Column(modifier = Modifier.padding(top = 10.dp)) {
+                  val visibleCities = PakistanCitiesData.allCities.filter {
+                    citySearchQuery.isBlank() || city -> city.name.contains(citySearchQuery, ignoreCase = true) || city.primaryLandmark.contains(citySearchQuery, ignoreCase = true)
+                  }
+                  if (visibleCities.isNotEmpty()) {
+                    Row(
+                      modifier = Modifier.fillMaxWidth(),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically
+                    ) {
                       Text(
-                        text = "Search city or landmark (e.g. Lahore, Swat, Multan...)",
-                        color = CinematicTextDim,
-                        fontSize = 12.sp
+                        text = "Search city",
+                        color = CineamaticTextMuted,
+                        fontSize = 10.sp
                       )
-                    },
-                    leadingIcon = {
-                      Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = QismatGold,
-                        modifier = Modifier.size(18.dp)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                      value = citySearchQuery,
+                      onValueChange = { citySearchQuery = it },
+                      modifier = Modifier.fillMaxWidth(),
+                      placeholder = { Text("Search city...", color = CinematicTextDim, fontSize = 11.sp) },
+                      singleLine = true,
+                      colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = QismatGold,
+                        unfocusedBorderColor = CinematicBorder,
+                        focusedTextColor = CinematicWhite,
+                        unfocusedTextColor = CinematicWhite,
+                        focusedContainerColor = CinematicSurface,
+                        unfocusedContainerColor = CinematicSurface
                       )
-                    },
-                    trailingIcon = {
-                      if (citySearchQuery.isNotEmpty()) {
-                        IconButton(onClick = { citySearchQuery = "" }) {
-                          Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Clear",
-                            tint = CinematicTextDim,
-                            modifier = Modifier.size(16.dp)
-                          )
-                        }
-                      }
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                      focusedContainerColor = CinematicSurface,
-                      unfocusedContainerColor = CinematicSurface,
-                      focusedBorderColor = QismatGold,
-                      unfocusedBorderColor = CinematicBorder,
-                      focusedTextColor = CinematicWhite,
-                      unfocusedTextColor = CinematicWhite
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                  )
-
-                  Spacer(modifier = Modifier.height(8.dp))
-
-                  // Group Filter Chips (All, Sindh, Punjab, KPK, Balochistan, International)
-                  LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(PakistanCitiesData.groups) { group ->
-                      val isGroupSelected = selectedCityGroup == group
-                      Box(
-                        modifier = Modifier
-                          .clip(RoundedCornerShape(8.dp))
-                          .background(if (isGroupSelected) QismatGold else CinematicSurface)
-                          .border(1.dp, if (isGroupSelected) QismatGold else CinematicBorder, RoundedCornerShape(8.dp))
-                          .clickable { selectedCityGroup = group }
-                          .padding(horizontal = 10.dp, vertical = 5.dp)
-                      ) {
-                        Text(
-                          text = group,
-                          color = if (isGroupSelected) Color.Black else CinematicWhite,
-                          fontSize = 11.sp,
-                          fontWeight = if (isGroupSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                      items(visibleCities.take(8)) { city ->
+                        CityChip(
+                          city = city,
+                          isSelected = selectedCityLocation.name == city.name,
+                          onClick = {
+                            viewModel.selectCity(city)
+                            isLocationDropdownOpen = false
+                          }
                         )
                       }
                     }
                   }
-
-                  Spacer(modifier = Modifier.height(10.dp))
-
-                  // Filtered Cities List
-                  val filteredCities = PakistanCitiesData.allCities.filter { city ->
-                    val matchesGroup = (selectedCityGroup == "All") || (city.group == selectedCityGroup)
-                    val matchesSearch = citySearchQuery.isBlank() ||
-                      city.name.contains(citySearchQuery, ignoreCase = true) ||
-                      city.group.contains(citySearchQuery, ignoreCase = true) ||
-                      city.famousPlaces.any { it.contains(citySearchQuery, ignoreCase = true) }
-                    matchesGroup && matchesSearch
-                  }
-
-                  Column(
-                    modifier = Modifier
-                      .fillMaxWidth()
-                      .height(240.dp)
-                      .clip(RoundedCornerShape(12.dp))
-                      .background(CinematicSurface)
-                      .border(1.dp, CinematicBorder, RoundedCornerShape(12.dp))
-                      .padding(6.dp)
-                  ) {
-                    LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                      items(filteredCities) { city ->
-                        val isSelected = selectedCityLocation.id == city.id
-                        Box(
-                          modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) QismatGold.copy(alpha = 0.2f) else Color.Transparent)
-                            .border(1.dp, if (isSelected) QismatGold else Color.Transparent, RoundedCornerShape(8.dp))
-                            .clickable {
-                              viewModel.selectCity(city)
-                              isLocationDropdownOpen = false
-                            }
-                            .padding(horizontal = 10.dp, vertical = 8.dp)
-                            .testTag("city_item_${city.id}")
-                        ) {
-                          Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                          ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                              Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(text = city.emoji, fontSize = 14.sp)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                  text = "${city.name} - ${city.primaryLandmark}",
-                                  color = if (isSelected) QismatGold else CinematicWhite,
-                                  fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                  fontSize = 12.sp
-                                )
-                              }
-                              Spacer(modifier = Modifier.height(2.dp))
-                              Text(
-                                text = "${city.group} • ${city.famousPlaces.joinToString(", ")}",
-                                color = CinematicTextDim,
-                                fontSize = 10.sp,
-                                maxLines = 1
-                              )
-                            }
-                            if (isSelected) {
-                              Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Selected",
-                                tint = QismatGold,
-                                modifier = Modifier.size(16.dp)
-                              )
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
                 }
               }
             }
           }
 
           Spacer(modifier = Modifier.height(14.dp))
-
-          // C: CINEMATIC STYLES
-          Text(
-            text = "Cinematic Visual Style:",
-            color = CinematicWhite,
-            fontWeight = FontWeight.Bold,
-            fontSize = 13.sp
-          )
-          Spacer(modifier = Modifier.height(8.dp))
-
-          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            StylePresets.allStyles.forEach { style ->
-              CinematicStyleCard(
-                style = style,
-                isSelected = selectedStyle.id == style.id,
-                onClick = { viewModel.selectStyle(style) }
-              )
-            }
-          }
-
-          Spacer(modifier = Modifier.height(14.dp))
-
-          // D: DURATION & DIALOGUE LANGUAGE SETTINGS
-          Card(
-            modifier = Modifier
-              .fillMaxWidth()
-              .clip(RoundedCornerShape(14.dp))
-              .border(1.dp, CinematicBorder, RoundedCornerShape(14.dp)),
-            colors = CardDefaults.cardColors(containerColor = CinematicSurface)
-          ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-              // Duration Slider
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Text(
-                  text = "Film Trailer Duration:",
-                  color = CinematicWhite,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 12.sp
-                )
-                Text(
-                  text = "$durationMinutes Mins (Cinematic Cut)",
-                  color = QismatGold,
-                  fontWeight = FontWeight.Black,
-                  fontSize = 12.sp
-                )
-              }
-              Slider(
-                value = durationMinutes.toFloat(),
-                onValueChange = { viewModel.setDurationMinutes(it.toInt()) },
-                valueRange = 1f..10f,
-                steps = 8,
-                colors = SliderDefaults.colors(
-                  thumbColor = QismatGold,
-                  activeTrackColor = QismatGold,
-                  inactiveTrackColor = CinematicBorder
-                ),
-                modifier = Modifier.fillMaxWidth()
-              )
-
-              Spacer(modifier = Modifier.height(8.dp))
-
-              // Language Selector
-              Text(
-                text = "Dialogue / Voiceover Language:",
-                color = CinematicWhite,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp
-              )
-              Spacer(modifier = Modifier.height(6.dp))
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-              ) {
-                val languages = listOf("Urdu", "Hindi", "English")
-                languages.forEach { lang ->
-                  val isLangSelected = selectedLanguage == lang
-                  Box(
-                    modifier = Modifier
-                      .weight(1f)
-                      .clip(RoundedCornerShape(8.dp))
-                      .background(if (isLangSelected) QismatGold else CinematicSurfaceElevated)
-                      .border(1.dp, if (isLangSelected) QismatGold else CinematicBorder, RoundedCornerShape(8.dp))
-                      .clickable { viewModel.setLanguage(lang) }
-                      .padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                  ) {
-                    Text(
-                      text = lang,
-                      color = if (isLangSelected) Color.Black else CinematicWhite,
-                      fontWeight = if (isLangSelected) FontWeight.Bold else FontWeight.Normal,
-                      fontSize = 12.sp
-                    )
-                  }
-                }
-              }
-            }
-          }
-
-          Spacer(modifier = Modifier.height(16.dp))
 
           BigRedButton(
-            text = if (isSplittingScenes) "QISMAT AI Scenes Compile Kar Raha Hai..." else "Scenes & Storyboard Banao 🎬",
-            enabled = !isSplittingScenes,
-            onClick = { viewModel.autoSplitStory() },
-            icon = {
-              if (isSplittingScenes) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
-              } else {
-                Text(text = "⚡", fontSize = 16.sp)
-              }
-            }
+            text = "Render My Qismat Film 🎬",
+            onClick = { viewModel.renderMovieStoryboard() }
           )
         }
       }
     }
 
-    // STEP 3: STORYBOARD & 4K RENDER
-    item {
-      StepperSection(
-        stepNumber = 3,
-        title = "Storyboard & Widescope Review",
-        subtitle = "Camera shots, dialogues aur face lock verification",
-        isExpanded = currentStep == 3,
-        isCompleted = generatedScenes.isNotEmpty(),
-        onHeaderClick = {
-          if (generatedScenes.isNotEmpty()) viewModel.setStep(3)
-        }
-      ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-          if (generatedScenes.isEmpty()) {
-            Box(
-              modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(CinematicSurface)
-                .padding(24.dp),
-              contentAlignment = Alignment.Center
-            ) {
-              Text(
-                text = "Pehle Step 2 se Storyboard generate karein",
-                color = CinematicTextMuted,
-                fontSize = 12.sp
-              )
-            }
-          } else {
-            var isStoryboardsGridView by remember { mutableStateOf(true) }
-
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Column {
-                Text(
-                  text = "${generatedScenes.size} Storyboard Scenes Tayyar Hain",
-                  color = QismatGold,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 13.sp
-                )
-                Text(
-                  text = if (isProUser) "VIP 4K Master (No Watermark)" else "Free Version (Qismat Watermark)",
-                  color = if (isProUser) QismatGold else CinematicTextMuted,
-                  fontSize = 10.sp
-                )
-              }
-
-              // View switcher: Grid (Coil) vs Detailed List
-              Row(
-                modifier = Modifier
-                  .clip(RoundedCornerShape(8.dp))
-                  .background(CinematicSurface)
-                  .border(1.dp, CinematicBorder, RoundedCornerShape(8.dp))
-                  .padding(2.dp)
-              ) {
-                Box(
-                  modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (isStoryboardsGridView) QismatGold else Color.Transparent)
-                    .clickable { isStoryboardsGridView = true }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .testTag("toggle_storyboard_grid")
-                ) {
-                  Text(
-                    text = "Grid ⊞",
-                    color = if (isStoryboardsGridView) Color.Black else CinematicTextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                  )
-                }
-
-                Box(
-                  modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (!isStoryboardsGridView) QismatGold else Color.Transparent)
-                    .clickable { isStoryboardsGridView = false }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .testTag("toggle_storyboard_list")
-                ) {
-                  Text(
-                    text = "List ☰",
-                    color = if (!isStoryboardsGridView) Color.Black else CinematicTextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                  )
-                }
-              }
-            }
-
+    if (isRenderingMovie) {
+      item {
+        Card(
+          modifier = Modifier.fillMaxWidth(),
+          colors = CardDefaults.cardColors(containerColor = CinematicSurfaceElevated),
+          shape = RoundedCornerShape(16.dp)
+        ) {
+          Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+              text = renderStatusText,
+              color = CinematicWhite,
+              fontWeight = FontWeight.Bold,
+              fontSize = 12.sp
+            )
             Spacer(modifier = Modifier.height(12.dp))
-
-            if (isStoryboardsGridView) {
-              // Storyboard Grid UI component powered by Coil with shimmer & circular loading indicator overlay
-              StoryboardGrid(
-                scenes = generatedScenes,
-                style = selectedStyle,
-                heroImageUri = heroImageUri,
-                isFaceLocked = isFaceLocked,
-                isLoading = isSplittingScenes,
-                loadingMessage = "AI Storyboard shots aur dialogs process ho rahe hain...",
-                isPro = isProUser,
-                onEditClick = { scene ->
-                  sceneBeingEdited = scene
-                  editedDialogueText = scene.dialogue
-                  editedSceneDesc = scene.text
-                  editedCameraShot = scene.camera
-                },
-                onRegenerateDialogue = { scene ->
-                  viewModel.regenerateSceneDialogue(scene.sceneNumber)
-                }
-              )
-            } else {
-              Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                generatedScenes.forEach { scene ->
-                  SceneDetailCard(
-                    scene = scene,
-                    style = selectedStyle,
-                    heroImageUri = heroImageUri,
-                    isFaceLocked = isFaceLocked,
-                    isPro = isProUser,
-                    onEditClick = {
-                      sceneBeingEdited = scene
-                      editedDialogueText = scene.dialogue
-                      editedSceneDesc = scene.text
-                      editedCameraShot = scene.camera
-                    },
-                    onRegenerateDialogue = {
-                      viewModel.regenerateSceneDialogue(scene.sceneNumber)
-                    }
-                  )
-                }
-              }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (isRenderingMovie) {
-              Card(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .clip(RoundedCornerShape(16.dp))
-                  .border(1.dp, QismatGold, RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = CinematicSurfaceElevated)
-              ) {
-                Column(
-                  modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                  horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                  Text(
-                    text = renderStatusText,
-                    color = CinematicWhite,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.Center
-                  )
-                  Spacer(modifier = Modifier.height(10.dp))
-                  LinearProgressIndicator(
-                    progress = { renderProgress },
-                    modifier = Modifier
-                      .fillMaxWidth()
-                      .height(6.dp)
-                      .clip(RoundedCornerShape(4.dp)),
-                    color = QismatGold,
-                    trackColor = CinematicBorder
-                  )
-                }
-              }
-              Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            BigRedButton(
-              text = if (isRenderingMovie) "QISMAT AI Movie Render Ho Rahi Hai..." else "Poori Film Dekho 🎬",
-              enabled = !isRenderingMovie,
-              onClick = { viewModel.renderMovieStoryboard() },
-              icon = {
-                Text(text = "🎬", fontSize = 16.sp)
-              }
+            LinearProgressIndicator(
+              progress = renderProgress,
+              modifier = Modifier.fillMaxWidth(),
+              color = QismatGold,
+              trackColor = CinematicSurface
             )
           }
         }
       }
     }
 
-    item {
-      Spacer(modifier = Modifier.height(24.dp))
+    if (generatedScenes.isNotEmpty()) {
+      item {
+        StoryboardGrid(
+          scenes = generatedScenes,
+          onEditScene = { scene ->
+            sceneBeingEdited = scene
+            editedDialogueText = scene.dialogue
+            editedSceneDesc = scene.text
+            editedCameraShot = scene.camera
+          },
+          onRegenerateScene = { sceneNumber -> viewModel.regenerateSceneDialogue(sceneNumber) }
+        )
+      }
     }
   }
 
-  // Edit Scene Dialog
-  sceneBeingEdited?.let { scene ->
-    androidx.compose.material3.AlertDialog(
-      onDismissRequest = { sceneBeingEdited = null },
-      containerColor = CinematicSurfaceElevated,
-      shape = RoundedCornerShape(18.dp),
-      title = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(
-            imageVector = Icons.Default.Edit,
-            contentDescription = "Edit",
-            tint = QismatGold,
-            modifier = Modifier.size(18.dp)
-          )
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = "Scene ${scene.sceneNumber} Edit Karein",
-            color = CinematicWhite,
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
-          )
-        }
-      },
-      text = {
-        Column(
-          modifier = Modifier.fillMaxWidth(),
-          verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-          Text(
-            text = "Dialogue / Voiceover:",
-            color = QismatGold,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp
-          )
-          OutlinedTextField(
-            value = editedDialogueText,
-            onValueChange = { editedDialogueText = it },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-              focusedContainerColor = CinematicSurface,
-              unfocusedContainerColor = CinematicSurface,
-              focusedBorderColor = QismatGold,
-              unfocusedBorderColor = CinematicBorder,
-              focusedTextColor = CinematicWhite,
-              unfocusedTextColor = CinematicWhite
-            ),
-            shape = RoundedCornerShape(10.dp)
-          )
-
-          Text(
-            text = "Camera Shot:",
-            color = CinematicCyan,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp
-          )
-          OutlinedTextField(
-            value = editedCameraShot,
-            onValueChange = { editedCameraShot = it },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-              focusedContainerColor = CinematicSurface,
-              unfocusedContainerColor = CinematicSurface,
-              focusedBorderColor = CinematicCyan,
-              unfocusedBorderColor = CinematicBorder,
-              focusedTextColor = CinematicWhite,
-              unfocusedTextColor = CinematicWhite
-            ),
-            shape = RoundedCornerShape(10.dp)
-          )
-
-          Text(
-            text = "Visual Description:",
-            color = CinematicWhite,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp
-          )
-          OutlinedTextField(
-            value = editedSceneDesc,
-            onValueChange = { editedSceneDesc = it },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-              focusedContainerColor = CinematicSurface,
-              unfocusedContainerColor = CinematicSurface,
-              focusedBorderColor = CinematicBorder,
-              unfocusedBorderColor = CinematicBorder,
-              focusedTextColor = CinematicWhite,
-              unfocusedTextColor = CinematicWhite
-            ),
-            shape = RoundedCornerShape(10.dp)
-          )
-        }
-      },
-      confirmButton = {
-        Button(
-          onClick = {
-            viewModel.updateScene(
-              sceneNumber = scene.sceneNumber,
-              updatedText = editedSceneDesc,
-              updatedDialogue = editedDialogueText,
-              updatedCamera = editedCameraShot
-            )
-            sceneBeingEdited = null
-            Toast.makeText(context, "Scene ${scene.sceneNumber} update ho gaya! ✅", Toast.LENGTH_SHORT).show()
-          },
-          colors = ButtonDefaults.buttonColors(containerColor = QismatGold, contentColor = Color.Black),
-          shape = RoundedCornerShape(10.dp)
-        ) {
-          Text("Save Changes ✅", fontWeight = FontWeight.Bold)
-        }
-      },
-      dismissButton = {
-        OutlinedButton(
-          onClick = { sceneBeingEdited = null },
-          colors = ButtonDefaults.outlinedButtonColors(contentColor = CinematicTextMuted),
-          shape = RoundedCornerShape(10.dp)
-        ) {
-          Text("Cancel")
-        }
-      }
-    )
-  }
-
-  // Paywall Dialog
   if (showPaywallDialog) {
     PaywallProDialog(
-      onDismiss = { viewModel.closePaywallDialog() },
-      onUnlockPro = { viewModel.upgradeToPro() },
-      onInviteFriend = { viewModel.shareReferral() }
+      onClose = { viewModel.closePaywallDialog() },
+      onUpgrade = { viewModel.upgradeToPro() }
     )
   }
 
-  // CameraX In-App Live Capture Dialog
-  if (showCameraXDialog) {
-    CameraXCaptureDialog(
-      onDismiss = { showCameraXDialog = false },
-      onPhotoCaptured = { uri ->
-        viewModel.setPendingHeroImageUri(uri.toString())
-        Toast.makeText(context, "Hero photo capture ho gayi! Face-Lock tayyar hai 📸", Toast.LENGTH_SHORT).show()
-      }
-    )
-  }
-
-  // Room Local Story Drafts Management Dialog
   if (showDraftsDialog) {
     StoryDraftsDialog(
       drafts = allDrafts,
       onDismiss = { showDraftsDialog = false },
-      onSelectDraft = { draft ->
+      onLoadDraft = { draft ->
         viewModel.loadStoryDraft(draft)
         showDraftsDialog = false
       },
-      onDeleteDraft = { draftId ->
-        viewModel.deleteStoryDraft(draftId)
-      }
+      onDeleteDraft = { draft -> viewModel.deleteStoryDraft(draft.id) }
     )
   }
 }
@@ -1689,334 +1182,30 @@ private fun StudioModeTab(
   Box(
     modifier = modifier
       .clip(RoundedCornerShape(10.dp))
-      .background(if (isSelected) QismatGold else CinematicSurfaceElevated)
+      .background(if (isSelected) QismatGold.copy(alpha = 0.18f) else CinematicSurface)
       .border(1.dp, if (isSelected) QismatGold else CinematicBorder, RoundedCornerShape(10.dp))
       .clickable { onClick() }
-      .padding(vertical = 8.dp, horizontal = 4.dp),
+      .padding(vertical = 8.dp),
     contentAlignment = Alignment.Center
   ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
       Text(
         text = title,
-        color = if (isSelected) Color.Black else CinematicWhite,
+        color = if (isSelected) QismatGold else CinematicWhite,
         fontWeight = FontWeight.Bold,
-        fontSize = 11.sp,
-        maxLines = 1
+        fontSize = 10.sp
       )
       Text(
         text = subtitle,
-        color = if (isSelected) Color.Black.copy(alpha = 0.8f) else CinematicTextMuted,
-        fontSize = 9.sp
+        color = if (isSelected) QismatGold else CinematicTextMuted,
+        fontSize = 8.sp
       )
     }
   }
 }
 
 @Composable
-private fun TimeMachineStageItem(stage: String, desc: String) {
-  Row(modifier = Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-    Text(text = "•", color = QismatGold, fontWeight = FontWeight.Black, fontSize = 14.sp)
-    Spacer(modifier = Modifier.width(6.dp))
-    Column {
-      Text(text = stage, color = CinematicWhite, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-      Text(text = desc, color = CinematicTextMuted, fontSize = 10.sp)
-    }
-  }
-}
-
-@Composable
-fun SceneDetailCard(
-  scene: FilmScene,
-  style: com.example.model.CinematicStyle,
-  heroImageUri: String?,
-  isFaceLocked: Boolean,
-  isPro: Boolean = false,
-  onEditClick: () -> Unit = {},
-  onRegenerateDialogue: () -> Unit = {}
-) {
-  Card(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(RoundedCornerShape(16.dp))
-      .border(1.dp, CinematicBorder, RoundedCornerShape(16.dp)),
-    colors = CardDefaults.cardColors(containerColor = CinematicSurfaceElevated),
-    shape = RoundedCornerShape(16.dp)
-  ) {
-    Column(modifier = Modifier.padding(12.dp)) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(
-            modifier = Modifier
-              .clip(RoundedCornerShape(6.dp))
-              .background(QismatGold)
-              .padding(horizontal = 6.dp, vertical = 2.dp)
-          ) {
-            Text(
-              text = "SCENE ${scene.sceneNumber}",
-              color = Color.Black,
-              fontWeight = FontWeight.Black,
-              fontSize = 11.sp
-            )
-          }
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = scene.timeCode,
-            color = QismatGold,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium
-          )
-        }
-
-        if (scene.ageStage.isNotBlank()) {
-          Box(
-            modifier = Modifier
-              .clip(RoundedCornerShape(6.dp))
-              .background(CinematicSurface)
-              .padding(horizontal = 6.dp, vertical = 2.dp)
-          ) {
-            Text(
-              text = scene.ageStage,
-              color = CinematicCyan,
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold
-            )
-          }
-        }
-      }
-
-      Spacer(modifier = Modifier.height(10.dp))
-
-      CinematicFilmFrame(
-        style = style,
-        sceneNumber = scene.sceneNumber,
-        cameraShot = scene.camera,
-        heroImageUri = heroImageUri,
-        isFaceLocked = isFaceLocked,
-        ageStage = scene.ageStage,
-        locationName = scene.locationName,
-        isPro = isPro
-      )
-
-      Spacer(modifier = Modifier.height(10.dp))
-
-      Text(
-        text = scene.text,
-        color = CinematicWhite,
-        fontSize = 12.sp,
-        lineHeight = 17.sp
-      )
-
-      Spacer(modifier = Modifier.height(8.dp))
-
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .clip(RoundedCornerShape(10.dp))
-          .background(CinematicSurface)
-          .border(1.dp, CinematicBorder, RoundedCornerShape(10.dp))
-          .padding(10.dp)
-      ) {
-        Row(verticalAlignment = Alignment.Top) {
-          Icon(
-            imageVector = Icons.Default.FormatQuote,
-            contentDescription = "Dialogue",
-            tint = QismatGold,
-            modifier = Modifier.size(16.dp)
-          )
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(
-            text = scene.dialogue,
-            color = QismatGold,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            lineHeight = 16.sp,
-            modifier = Modifier.weight(1f)
-          )
-        }
-      }
-
-      Spacer(modifier = Modifier.height(8.dp))
-
-      // Scene Edit & Regenerate Dialogue Action Buttons
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        // Regenerate Dialogue Button
-        Box(
-          modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(CinematicSurface)
-            .border(1.dp, CinematicBorder, RoundedCornerShape(8.dp))
-            .clickable { onRegenerateDialogue() }
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-              imageVector = Icons.Default.Refresh,
-              contentDescription = "Regenerate",
-              tint = QismatGold,
-              modifier = Modifier.size(12.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-              text = "Naya Dialogue ⚡",
-              color = QismatGold,
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Edit Scene Button
-        Box(
-          modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(QismatGold.copy(alpha = 0.15f))
-            .border(1.dp, QismatGold, RoundedCornerShape(8.dp))
-            .clickable { onEditClick() }
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-              imageVector = Icons.Default.Edit,
-              contentDescription = "Edit",
-              tint = QismatGold,
-              modifier = Modifier.size(12.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-              text = "Edit Scene ✏️",
-              color = QismatGold,
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold
-            )
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
-fun StudioStepperHeader(
-  activeStep: Int,
-  onStepClick: (Int) -> Unit
-) {
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(RoundedCornerShape(14.dp))
-      .background(CinematicSurface)
-      .border(1.dp, CinematicBorder, RoundedCornerShape(14.dp))
-      .padding(10.dp),
-    horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically
-  ) {
-    StepPill(
-      step = 1,
-      title = "Face Lock",
-      isActive = activeStep == 1,
-      isCompleted = activeStep > 1,
-      onClick = { onStepClick(1) },
-      modifier = Modifier.weight(1f)
-    )
-    Box(
-      modifier = Modifier
-        .width(16.dp)
-        .height(1.dp)
-        .background(CinematicBorder)
-    )
-    StepPill(
-      step = 2,
-      title = "Mode & Story",
-      isActive = activeStep == 2,
-      isCompleted = activeStep > 2,
-      onClick = { onStepClick(2) },
-      modifier = Modifier.weight(1.2f)
-    )
-    Box(
-      modifier = Modifier
-        .width(16.dp)
-        .height(1.dp)
-        .background(CinematicBorder)
-    )
-    StepPill(
-      step = 3,
-      title = "Storyboard",
-      isActive = activeStep == 3,
-      isCompleted = false,
-      onClick = { onStepClick(3) },
-      modifier = Modifier.weight(1f)
-    )
-  }
-}
-
-@Composable
-fun StepPill(
-  step: Int,
-  title: String,
-  isActive: Boolean,
-  isCompleted: Boolean,
-  onClick: () -> Unit,
-  modifier: Modifier = Modifier
-) {
-  Row(
-    modifier = modifier
-      .clip(RoundedCornerShape(8.dp))
-      .clickable { onClick() }
-      .padding(horizontal = 4.dp, vertical = 6.dp),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.Center
-  ) {
-    Box(
-      modifier = Modifier
-        .size(20.dp)
-        .clip(CircleShape)
-        .background(
-          when {
-            isActive -> QismatGold
-            isCompleted -> QismatEmerald
-            else -> CinematicSurfaceElevated
-          }
-        ),
-      contentAlignment = Alignment.Center
-    ) {
-      if (isCompleted) {
-        Icon(
-          imageVector = Icons.Default.Check,
-          contentDescription = "Done",
-          tint = Color.Black,
-          modifier = Modifier.size(12.dp)
-        )
-      } else {
-        Text(
-          text = "$step",
-          color = if (isActive) Color.Black else CinematicTextMuted,
-          fontSize = 11.sp,
-          fontWeight = FontWeight.Bold
-        )
-      }
-    }
-    Spacer(modifier = Modifier.width(6.dp))
-    Text(
-      text = title,
-      color = if (isActive) CinematicWhite else CinematicTextMuted,
-      fontSize = 11.sp,
-      fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
-    )
-  }
-}
-
-@Composable
-fun StepperSection(
+private fun StepperSection(
   stepNumber: Int,
   title: String,
   subtitle: String,
@@ -2028,40 +1217,27 @@ fun StepperSection(
   Card(
     modifier = Modifier
       .fillMaxWidth()
-      .clip(RoundedCornerShape(18.dp))
-      .border(
-        width = if (isExpanded) 1.5.dp else 1.dp,
-        color = if (isExpanded) QismatGold else CinematicBorder,
-        shape = RoundedCornerShape(18.dp)
-      ),
-    colors = CardDefaults.cardColors(containerColor = CinematicSurface),
-    shape = RoundedCornerShape(18.dp)
+      .clip(RoundedCornerShape(16.dp))
+      .border(1.dp, if (isCompleted) QismatGold.copy(alpha = 0.7f) else CinematicBorder, RoundedCornerShape(16.dp)),
+    colors = CardDefaults.cardColors(containerColor = CinematicSurfaceElevated)
   ) {
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = Modifier.padding(14.dp)) {
       Row(
         modifier = Modifier
           .fillMaxWidth()
           .clickable { onHeaderClick() },
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
       ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.weight(1f)
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
           Box(
             modifier = Modifier
-              .size(28.dp)
+              .size(26.dp)
               .clip(CircleShape)
-              .background(if (isExpanded) QismatGold else if (isCompleted) QismatEmerald else CinematicSurfaceElevated),
+              .background(if (isCompleted) QismatGold else CinematicBorder),
             contentAlignment = Alignment.Center
           ) {
-            Text(
-              text = "$stepNumber",
-              color = if (isExpanded || isCompleted) Color.Black else CinematicWhite,
-              fontWeight = FontWeight.Bold,
-              fontSize = 13.sp
-            )
+            Text(text = stepNumber.toString(), color = Color.Black, fontWeight = FontWeight.Black, fontSize = 12.sp)
           }
           Spacer(modifier = Modifier.width(10.dp))
           Column {
@@ -2069,39 +1245,24 @@ fun StepperSection(
               text = title,
               color = CinematicWhite,
               fontWeight = FontWeight.Bold,
-              fontSize = 14.sp
+              fontSize = 13.sp
             )
             Text(
               text = subtitle,
               color = CinematicTextMuted,
-              fontSize = 11.sp
+              fontSize = 10.sp
             )
           }
         }
-
-        if (isCompleted) {
-          Box(
-            modifier = Modifier
-              .clip(RoundedCornerShape(6.dp))
-              .background(QismatEmerald.copy(alpha = 0.2f))
-              .padding(horizontal = 6.dp, vertical = 2.dp)
-          ) {
-            Text(
-              text = "Completed",
-              color = QismatEmerald,
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold
-            )
-          }
-        }
+        Icon(
+          imageVector = if (isExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+          contentDescription = null,
+          tint = QismatGold,
+          modifier = Modifier.size(18.dp)
+        )
       }
-
-      AnimatedVisibility(
-        visible = isExpanded,
-        enter = fadeIn() + expandVertically(),
-        exit = fadeOut() + shrinkVertically()
-      ) {
-        Column(modifier = Modifier.padding(top = 16.dp)) {
+      AnimatedVisibility(visible = isExpanded, enter = fadeIn(), exit = fadeOut()) {
+        Box(modifier = Modifier.padding(top = 12.dp)) {
           content()
         }
       }
@@ -2110,45 +1271,129 @@ fun StepperSection(
 }
 
 @Composable
-fun DemoAvatarChip(
+private fun StudioStepperHeader(
+  activeStep: Int,
+  onStepClick: (Int) -> Unit
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.spacedBy(8.dp)
+  ) {
+    listOf(1, 2, 3).forEach { step ->
+      val selected = step == activeStep
+      Box(
+        modifier = Modifier
+          .weight(1f)
+          .clip(RoundedCornerShape(12.dp))
+          .background(if (selected) QismatGold else CinematicSurface)
+          .border(1.dp, if (selected) QismatGold else CinematicBorder, RoundedCornerShape(12.dp))
+          .clickable { onStepClick(step) }
+          .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+      ) {
+        Text(
+          text = "Step $step",
+          color = if (selected) Color.Black else CinematicWhite,
+          fontWeight = FontWeight.Bold,
+          fontSize = 11.sp
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun DemoAvatarChip(
   name: String,
   onClick: () -> Unit
 ) {
   Box(
     modifier = Modifier
-      .clip(RoundedCornerShape(8.dp))
-      .background(CinematicSurfaceElevated)
-      .border(1.dp, CinematicBorder, RoundedCornerShape(8.dp))
+      .clip(RoundedCornerShape(16.dp))
+      .background(QismatGold.copy(alpha = 0.16f))
+      .border(1.dp, QismatGold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
       .clickable { onClick() }
-      .padding(horizontal = 8.dp, vertical = 4.dp)
+      .padding(horizontal = 8.dp, vertical = 6.dp)
   ) {
     Text(
       text = name,
-      color = QismatGold,
-      fontSize = 11.sp,
-      fontWeight = FontWeight.Medium
+      color = CinematicWhite,
+      fontSize = 9.sp,
+      fontWeight = FontWeight.Bold
     )
   }
 }
 
 @Composable
-fun StoryStarterChip(
-  label: String,
+private fun CityChip(
+  city: com.example.data.CityLocation,
+  isSelected: Boolean,
   onClick: () -> Unit
 ) {
   Box(
     modifier = Modifier
-      .clip(RoundedCornerShape(10.dp))
-      .background(CinematicSurfaceElevated)
-      .border(1.dp, CinematicBorder, RoundedCornerShape(10.dp))
+      .clip(RoundedCornerShape(12.dp))
+      .background(if (isSelected) QismatGold.copy(alpha = 0.18f) else CinematicSurface)
+      .border(1.dp, if (isSelected) QismatGold else CinematicBorder, RoundedCornerShape(12.dp))
       .clickable { onClick() }
-      .padding(horizontal = 10.dp, vertical = 6.dp)
+      .padding(horizontal = 8.dp, vertical = 6.dp)
   ) {
     Text(
-      text = label,
-      color = CinematicWhite,
-      fontSize = 11.sp,
-      fontWeight = FontWeight.Medium
+      text = "${city.emoji} ${city.name}",
+      color = if (isSelected) QismatGold else CinematicWhite,
+      fontSize = 9.sp,
+      fontWeight = FontWeight.Bold
     )
   }
 }
+
+@Composable
+private fun TimeMachineStageItem(title: String, subtitle: String) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(vertical = 2.dp),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Box(
+      modifier = Modifier
+        .size(8.dp)
+        .clip(CircleShape)
+        .background(QismatGold)
+    )
+    Spacer(modifier = Modifier.width(8.dp))
+    Column {
+      Text(
+        text = title,
+        color = CinematicWhite,
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp
+      )
+      Text(
+        text = subtitle,
+        color = CinematicTextMuted,
+        fontSize = 9.sp
+      )
+    }
+  }
+}
+
+@Composable
+private fun StoryStarterChip(text: String, onClick: () -> Unit) {
+  Box(
+    modifier = Modifier
+      .clip(RoundedCornerShape(16.dp))
+      .background(QismatGold.copy(alpha = 0.12f))
+      .border(1.dp, QismatGold.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+      .clickable { onClick() }
+      .padding(horizontal = 8.dp, vertical = 6.dp)
+  ) {
+    Text(
+      text = text,
+      color = CinematicWhite,
+      fontSize = 9.sp,
+      fontWeight = FontWeight.Bold
+    )
+  }
+}
+
